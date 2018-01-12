@@ -1499,17 +1499,50 @@ class Callback {
     )));
   }
 #endif
+
+#if NODE_MODULE_VERSION >= NODE_8_0_MODULE_VERSION
+  v8::Local<v8::Value> Call_(v8::Isolate *isolate
+                           , v8::Local<v8::Object> target
+                           , int argc
+                           , v8::Local<v8::Value> argv[]
+                           , node::async_context* async_context) const {
+    EscapableHandleScope scope;
+
+    v8::Local<v8::Function> callback = New(handle_);
+    return scope.Escape(node::MakeCallback(
+        isolate
+      , target
+      , callback
+      , argc
+      , argv
+      , *async_context
+    ).ToLocalChecked());
+  }
+  friend class AsyncWorker;
+#endif  // NODE_MODULE_VERSION >= NODE_8_0_MODULE_VERSION
 };
 
 /* abstract */ class AsyncWorker {
  public:
-  explicit AsyncWorker(Callback *callback_)
-      : callback(callback_), errmsg_(NULL) {
+  explicit AsyncWorker(Callback* callback_,
+                       const char* resource_name = "Nan::AsyncWorker")
+      : callback(callback_), errmsg_(NULL), resource_name_(resource_name)
+#if NODE_MODULE_VERSION >= NODE_8_0_MODULE_VERSION
+        , async_context_(new node::async_context())
+#endif
+    {
     request.data = this;
 
     HandleScope scope;
     v8::Local<v8::Object> obj = New<v8::Object>();
     persistentHandle.Reset(obj);
+
+#if NODE_MODULE_VERSION >= NODE_8_0_MODULE_VERSION
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::Local<v8::String> v8_resource_name =
+        v8::String::NewFromUtf8(isolate, resource_name_);
+    *async_context_ = node::EmitAsyncInit(isolate, obj, v8_resource_name);
+#endif
   }
 
   virtual ~AsyncWorker() {
@@ -1517,6 +1550,10 @@ class Callback {
 
     if (!persistentHandle.IsEmpty())
       persistentHandle.Reset();
+#if NODE_MODULE_VERSION >= NODE_8_0_MODULE_VERSION
+    node::EmitAsyncDestroy(v8::Isolate::GetCurrent(), *async_context_);
+    delete async_context_;
+#endif
     delete callback;
     delete[] errmsg_;
   }
@@ -1582,7 +1619,7 @@ class Callback {
   virtual void HandleOKCallback() {
     HandleScope scope;
 
-    callback->Call(0, NULL);
+    MakeCallback(0, NULL);
   }
 
   virtual void HandleErrorCallback() {
@@ -1591,7 +1628,7 @@ class Callback {
     v8::Local<v8::Value> argv[] = {
       v8::Exception::Error(New<v8::String>(ErrorMessage()).ToLocalChecked())
     };
-    callback->Call(1, argv);
+    MakeCallback(1, argv);
   }
 
   void SetErrorMessage(const char *msg) {
@@ -1606,15 +1643,33 @@ class Callback {
     return errmsg_;
   }
 
+  v8::Local<v8::Value> MakeCallback(int argc, v8::Local<v8::Value> argv[]) {
+#if NODE_MODULE_VERSION >= NODE_8_0_MODULE_VERSION
+    v8::Isolate *isolate = v8::Isolate::GetCurrent();
+    v8::EscapableHandleScope scope(isolate);
+    return scope.Escape(
+        callback->Call_(isolate, isolate->GetCurrentContext()->Global(),
+                        argc, argv, async_context_));
+#else
+    return callback->Call(argc, argv);
+#endif
+  }
+
  private:
   NAN_DISALLOW_ASSIGN_COPY_MOVE(AsyncWorker)
   char *errmsg_;
+  const char *resource_name_;
+#if NODE_MODULE_VERSION >= NODE_8_0_MODULE_VERSION
+  node::async_context* async_context_;
+#endif  // NODE_MODULE_VERSION >= NODE_8_0_MODULE_VERSION
 };
 
 /* abstract */ class AsyncBareProgressWorkerBase : public AsyncWorker {
  public:
-  explicit AsyncBareProgressWorkerBase(Callback *callback_)
-      : AsyncWorker(callback_) {
+  explicit AsyncBareProgressWorkerBase(
+      Callback *callback_,
+      const char* resource_name = "Nan::AsyncBareProgressWorkerBase")
+      : AsyncWorker(callback_, resource_name) {
     uv_async_init(
         uv_default_loop()
       , &async
@@ -1653,8 +1708,10 @@ template<class T>
 /* abstract */
 class AsyncBareProgressWorker : public AsyncBareProgressWorkerBase {
  public:
-  explicit AsyncBareProgressWorker(Callback *callback_)
-      : AsyncBareProgressWorkerBase(callback_) {
+  explicit AsyncBareProgressWorker(
+      Callback *callback_,
+      const char* resource_name = "Nan::AsyncBareProgressWorker")
+      : AsyncBareProgressWorkerBase(callback_, resource_name) {
   }
 
   virtual ~AsyncBareProgressWorker() {
@@ -1693,8 +1750,12 @@ template<class T>
 /* abstract */
 class AsyncProgressWorkerBase : public AsyncBareProgressWorker<T> {
  public:
-  explicit AsyncProgressWorkerBase(Callback *callback_)
-      : AsyncBareProgressWorker<T>(callback_), asyncdata_(NULL), asyncsize_(0) {
+  explicit AsyncProgressWorkerBase(
+      Callback *callback_,
+      const char* resource_name = "Nan::AsyncProgressWorkerBase")
+      : AsyncBareProgressWorker<T>(callback_, resource_name),
+        asyncdata_(NULL),
+        asyncsize_(0) {
     uv_mutex_init(&async_lock);
   }
 
@@ -1749,8 +1810,10 @@ template<class T>
 /* abstract */
 class AsyncBareProgressQueueWorker : public AsyncBareProgressWorkerBase {
  public:
-  explicit AsyncBareProgressQueueWorker(Callback *callback_)
-      : AsyncBareProgressWorkerBase(callback_) {
+  explicit AsyncBareProgressQueueWorker(
+      Callback *callback_,
+      const char* resource_name = "Nan::AsyncBareProgressQueueWorker")
+      : AsyncBareProgressWorkerBase(callback_, resource_name) {
   }
 
   virtual ~AsyncBareProgressQueueWorker() {
@@ -1786,8 +1849,10 @@ template<class T>
 /* abstract */
 class AsyncProgressQueueWorker : public AsyncBareProgressQueueWorker<T> {
  public:
-  explicit AsyncProgressQueueWorker(Callback *callback_)
-      : AsyncBareProgressQueueWorker<T>(callback_) {
+  explicit AsyncProgressQueueWorker(
+      Callback *callback_,
+      const char* resource_name = "Nan::AsyncProgressQueueWorker")
+      : AsyncBareProgressQueueWorker<T>(callback_, resource_name) {
     uv_mutex_init(&async_lock);
   }
 
