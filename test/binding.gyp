@@ -83,6 +83,9 @@
         "target_name" : "asyncworkererror"
       , "sources"     : [ "cpp/asyncworkererror.cpp" ]
     }, {
+        "target_name" : "asyncworkercontext"
+      , "sources"     : [ "cpp/asyncworkercontext.cpp" ]
+    }, {
         "target_name" : "settemplate"
       , "sources"     : [ "cpp/settemplate.cpp" ]
     }

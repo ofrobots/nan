@@ -36,6 +36,7 @@ LINT_SOURCES = \
 	test/cpp/accessors.cpp \
 	test/cpp/accessors2.cpp \
 	test/cpp/asyncworker.cpp \
+	test/cpp/asyncworkercontext.cpp \
 	test/cpp/asyncprogressworker.cpp \
 	test/cpp/asyncprogressworkerstream.cpp \
 	test/cpp/asyncprogressworkersignal.cpp \
