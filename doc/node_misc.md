@@ -21,8 +21,8 @@ Definition:
 ```c++
 class AsyncResource {
  public:
-  AsyncResource(MaybeLocal<v8::Object> maybe_resource, v8::Local<v8::String> name);
-  AsyncResource(MaybeLocal<v8::Object> maybe_resource, const char* name);
+  AsyncResource(v8::Local<v8::Object> resource, v8::Local<v8::String> name);
+  AsyncResource(v8::Local<v8::Object> resource, const char* name);
   ~AsyncResource();
 
   v8::MaybeLocal<v8::Value> runInAsyncScope(v8::Local<v8::Object> target,
@@ -43,8 +43,8 @@ class AsyncResource {
 };
 ```
 
-* `maybe_resource`: An optional object associated with the async work that will be passed to the possible [async_hooks][]
-  `init` hook.
+* `resource`: An optional object associated with the async work that will be passed to the possible [async_hooks][]
+  `init` hook. Provide an empty handle to have this object created automatically.
 * `name`: Identified for the kind of resource that is being provided for diagnostics information exposed by the [async_hooks][]
   API. This will be passed to the possible `init` hook as the `type`. To avoid name collisions with other modules we recommend
   that the name include the name of the owning module as a prefix. For example `mysql` module could use something like
